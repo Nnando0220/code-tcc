@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.pytest-tmp/
+*.py[cod]
+
+# Dados podem conter identificadores e sao reconstruidos pelo pipeline.
+data/
+
+# Resultados, metricas e grafos sao artefatos reproduziveis.
+results/
+logs/

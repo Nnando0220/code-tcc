@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tcc-reddit"
+version = "2.0.0"
+description = "Pipeline reproduzivel para analise de redes de comunidades do Reddit"
+requires-python = ">=3.11"
+dependencies = [
+  "praw",
+  "pandas",
+  "networkx",
+  "tqdm",
+  "python-dotenv",
+  "pyarrow",
+  "python-louvain",
+  "scipy",
+  "chardet",
+  "PyYAML",
+]
+
+[project.scripts]
+tcc-reddit = "tcc_reddit.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider --basetemp=.pytest-tmp"

@@ -1,0 +1,11 @@
+gephi:
+  minimum_weight: 2
+  minimum_degree: 2
+  keep_largest_component: true
+  visualization_max_nodes: 400
+  subreddit_visualization_max_nodes: 300
+  export_by_subreddit: true
+
+centrality:
+  betweenness_sample_size: 100
+  random_seed: 42

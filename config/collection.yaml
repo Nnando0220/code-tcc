@@ -1,0 +1,32 @@
+run_id: run_2026_07_year_v2
+pipeline_version: 2.0.0
+
+subreddits:
+  brazil:
+    - brasil
+    - brasilivre
+    - BrasildoB
+    - NoticiasBR
+  international:
+    - politics
+    - worldnews
+    - geopolitics
+    - news
+
+sorts:
+  - top
+  - controversial
+  - hot
+  - new
+
+window:
+  start: "2025-07-13T06:20:34.222843Z"
+  end: "2026-07-13T06:20:34.222843Z"
+  time_filter: year
+  days: 365
+
+collection:
+  candidates_per_sort: 100
+  posts_per_subreddit: 150
+  exclude_stickied: true
+  replace_more_limit: null

@@ -1,0 +1,8 @@
+observational:
+  enabled: true
+
+balanced:
+  enabled: true
+  comments_per_post: 300
+  preserve_ancestors: true
+  random_seed: 42

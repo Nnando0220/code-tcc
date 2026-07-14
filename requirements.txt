@@ -1,0 +1,11 @@
+praw
+pandas
+networkx
+tqdm
+python-dotenv
+pyarrow
+python-louvain
+scipy
+chardet
+PyYAML
+pytest

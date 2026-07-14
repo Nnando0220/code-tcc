@@ -26,6 +26,20 @@ foi testado. Os modulos especializados sao a API oficial e assumirao a
 implementacao gradualmente. Os arquivos legados permanecem somente ate uma
 execucao completa passar por `scripts/validate_all.py`.
 
+Depois de uma validacao bem-sucedida, o pipeline remove as copias antigas em
+`data/raw`, `data/processed`, `data/graphs`, `data/metrics`, `data/balanced` e
+`data/analysis`. Permanecem como fontes definitivas apenas os caminhos por
+`run_id` mostrados no fluxo canonico.
+
+## Workspaces do Gephi
+
+- `observational`: `results/<run_id>/observational/gephi`, para descrever todo
+  o volume recuperado.
+- `balanced`: `results/<run_id>/balanced/gephi`, para comparacoes mais justas
+  entre subreddits.
+- `legacy`: nome reservado para projetos antigos baseados em `data/graphs`.
+  Esses arquivos nao sao canonicos e sao removidos depois da validacao.
+
 ## Imutabilidade
 
 Ao registrar um `run_id`, cada bruto recebe SHA-256 em

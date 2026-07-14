@@ -14,7 +14,6 @@ import networkx as nx
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-from .reporting.analysis import run_analysis
 from .validation.data_quality import (
     anonymize_user,
     clean_text,
@@ -29,7 +28,7 @@ from .networks.pipeline import (
     comment_coverage_by_subreddit,
     select_posts_round_robin,
 )
-from .settings import load_config
+from .settings import PROJECT_ROOT, load_config
 from .collection.comments import iter_submission_comments
 from .collection.reddit_client import create_reddit_client
 from .collection.submissions import get_submissions
@@ -58,12 +57,16 @@ MAX_COMMENTS_PER_POST = CONFIG.balanced_comments_per_post
 RANDOM_SEED = CONFIG.random_seed
 COMMENT_REPLACE_MORE_LIMIT = CONFIG.replace_more_limit
 
-RAW_DIR = "data/raw"
-PROCESSED_DIR = "data/processed"
+RAW_DIR = str(PROJECT_ROOT / "data" / "raw" / CONFIG.run_id)
+PROCESSED_DIR = str(
+    PROJECT_ROOT / "data" / "processed" / CONFIG.run_id / "observational"
+)
 GRAPH_DIR = "data/graphs"
 METRICS_DIR = "data/metrics"
 BALANCED_DIR = "data/balanced"
-BALANCED_PROCESSED_DIR = f"{BALANCED_DIR}/processed"
+BALANCED_PROCESSED_DIR = str(
+    PROJECT_ROOT / "data" / "processed" / CONFIG.run_id / "balanced"
+)
 BALANCED_GRAPH_DIR = f"{BALANCED_DIR}/graphs"
 BALANCED_METRICS_DIR = f"{BALANCED_DIR}/metrics"
 PILOT_ARCHIVE_DIR = "data/pilots/coleta_piloto_v1"
@@ -97,6 +100,7 @@ def configure(config):
     global MAX_COMMENTS_PER_POST, RANDOM_SEED, COMMENT_REPLACE_MORE_LIMIT
     global GEPHI_MIN_WEIGHT, GEPHI_MIN_DEGREE, GEPHI_KEEP_LARGEST_COMPONENT
     global GEPHI_MAX_NODES, EXPORT_BY_SUBREDDIT
+    global RAW_DIR, PROCESSED_DIR, BALANCED_PROCESSED_DIR
 
     CONFIG = config
     SUBREDDITS = list(config.subreddits)
@@ -113,6 +117,13 @@ def configure(config):
     GEPHI_KEEP_LARGEST_COMPONENT = config.gephi_keep_largest_component
     GEPHI_MAX_NODES = config.gephi_visualization_max_nodes
     EXPORT_BY_SUBREDDIT = config.export_by_subreddit
+    RAW_DIR = str(PROJECT_ROOT / "data" / "raw" / config.run_id)
+    PROCESSED_DIR = str(
+        PROJECT_ROOT / "data" / "processed" / config.run_id / "observational"
+    )
+    BALANCED_PROCESSED_DIR = str(
+        PROJECT_ROOT / "data" / "processed" / config.run_id / "balanced"
+    )
 
 
 # ============================================================
@@ -398,11 +409,7 @@ def save_raw_data(df_posts, df_comments, df_collections):
     df_comments.to_parquet(f"{RAW_DIR}/comments_raw.parquet", index=False)
     df_collections.to_parquet(f"{RAW_DIR}/post_collections.parquet", index=False)
 
-    df_posts.to_csv(f"{RAW_DIR}/posts_raw.csv", index=False)
-    df_comments.to_csv(f"{RAW_DIR}/comments_raw.csv", index=False)
-    df_collections.to_csv(f"{RAW_DIR}/post_collections.csv", index=False)
-
-    print("\nDados brutos salvos em data/raw/")
+    print(f"\nDados brutos salvos em {RAW_DIR}/")
 
 
 def read_table_with_fallback(stem):
@@ -445,11 +452,8 @@ def clean_and_process_data():
     df_posts = df_posts.drop(columns=["author"])
     df_comments = df_comments.drop(columns=["author"])
 
-    df_posts.to_parquet(f"{PROCESSED_DIR}/posts_clean.parquet", index=False)
-    df_comments.to_parquet(f"{PROCESSED_DIR}/comments_clean.parquet", index=False)
-
-    df_posts.to_csv(f"{PROCESSED_DIR}/posts_clean.csv", index=False)
-    df_comments.to_csv(f"{PROCESSED_DIR}/comments_clean.csv", index=False)
+    df_posts.to_parquet(f"{PROCESSED_DIR}/posts.parquet", index=False)
+    df_comments.to_parquet(f"{PROCESSED_DIR}/comments.parquet", index=False)
 
     print("\nDados tratados salvos em data/processed/")
 
@@ -467,16 +471,10 @@ def create_balanced_dataset(df_posts, df_comments, df_collections):
         sorts=SORTS,
     )
     balanced_posts.to_parquet(
-        f"{BALANCED_PROCESSED_DIR}/posts_balanced_clean.parquet", index=False
+        f"{BALANCED_PROCESSED_DIR}/posts.parquet", index=False
     )
     balanced_comments.to_parquet(
-        f"{BALANCED_PROCESSED_DIR}/comments_balanced_clean.parquet", index=False
-    )
-    balanced_posts.to_csv(
-        f"{BALANCED_PROCESSED_DIR}/posts_balanced_clean.csv", index=False
-    )
-    balanced_comments.to_csv(
-        f"{BALANCED_PROCESSED_DIR}/comments_balanced_clean.csv", index=False
+        f"{BALANCED_PROCESSED_DIR}/comments.parquet", index=False
     )
     manifest.to_csv(
         f"{BALANCED_PROCESSED_DIR}/sampling_manifest.csv", index=False
@@ -1348,6 +1346,12 @@ def main(reprocess_existing=None):
             f"{RAW_DIR}/post_collections"
         )
     else:
+        raw_manifest = Path(RAW_DIR) / "manifest.json"
+        if raw_manifest.exists():
+            raise ValueError(
+                f"O run_id {CONFIG.run_id} ja possui dados brutos registrados. "
+                "Use um novo run_id para realizar outra coleta."
+            )
         archive_existing_pilot()
         print("\nIniciando coleta definitiva no Reddit...")
         df_posts_raw, df_comments_raw, df_collections = collect_reddit_data()
@@ -1388,9 +1392,6 @@ def main(reprocess_existing=None):
         metrics_dir=BALANCED_METRICS_DIR,
         export_by_subreddit=EXPORT_BY_SUBREDDIT,
     )
-
-    print("\nConsolidando analise interpretativa...")
-    run_analysis(export=True)
 
     validate_outputs(
         df_posts=df_posts,

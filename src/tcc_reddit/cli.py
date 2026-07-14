@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 from .paths import RunPaths
-from .reporting.artifacts import publish_current_run
+from .reporting.artifacts import cleanup_legacy_layout, publish_current_run
 from .settings import load_config, validate_environment
 from .validation.validate_all import validate_run
 
@@ -67,14 +67,18 @@ def main(argv: list[str] | None = None) -> int:
         validate_environment(require_reddit=True)
         _run_pipeline(config, reprocess_existing=False)
         manifest = publish_current_run(config, paths)
+        _run_analysis()
         validation = validate_run(config, paths)
+        cleanup_legacy_layout(paths)
         print(f"Manifest: {manifest}")
         print(json.dumps(validation, indent=2))
     elif args.command == "reprocess":
         validate_environment(require_reddit=False)
         _run_pipeline(config, reprocess_existing=True)
         manifest = publish_current_run(config, paths)
+        _run_analysis()
         validation = validate_run(config, paths)
+        cleanup_legacy_layout(paths)
         print(f"Manifest: {manifest}")
         print(json.dumps(validation, indent=2))
     elif args.command == "analyze":

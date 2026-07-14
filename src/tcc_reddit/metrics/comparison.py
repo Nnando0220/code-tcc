@@ -7,9 +7,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from ..settings import load_config
+
 
 BASE_DIR = Path(__file__).resolve().parents[3]
-ANALYSIS_DIR = BASE_DIR / "data" / "analysis"
+RUN_ID = load_config().run_id
+ANALYSIS_DIR = BASE_DIR / "results" / RUN_ID / "comparison"
+REPORTS_DIR = BASE_DIR / "results" / RUN_ID / "reports"
 
 
 @dataclass(frozen=True)
@@ -138,6 +142,14 @@ def percent(value: float, digits: int = 1) -> str:
     return f"{value * 100:.{digits}f}%"
 
 
+def trend(previous: float, current: float) -> str:
+    if current > previous:
+        return "subiu"
+    if current < previous:
+        return "caiu"
+    return "permaneceu estavel"
+
+
 def build_report(
     global_comparison: pd.DataFrame,
     coverage: pd.DataFrame,
@@ -149,6 +161,10 @@ def build_report(
     global_lookup = global_comparison.set_index("metric")
     structural_lookup = structural.set_index("metric")
     strongest_overlap = overlap.sort_values("jaccard", ascending=False).iloc[0]
+    modularity_previous = structural_lookup.loc["worldnews_modularity", "previous"]
+    modularity_current = structural_lookup.loc["worldnews_modularity", "current"]
+    clustering_previous = structural_lookup.loc["BrasildoB_avg_clustering", "previous"]
+    clustering_current = structural_lookup.loc["BrasildoB_avg_clustering", "current"]
 
     lines = [
         "# Comparacao entre a coleta anterior e o novo dataset",
@@ -204,10 +220,10 @@ def build_report(
             f"{percent(global_lookup.loc['top_1pct_weighted_degree_share', 'current'])} das conexoes ponderadas.",
             f"- Em r/news, os comentarios por post passaram de {structural_lookup.loc['news_comments_per_post', 'previous']:.1f} para "
             f"{structural_lookup.loc['news_comments_per_post', 'current']:.1f}. Esse salto explica boa parte do aumento de escala da rede.",
-            f"- A modularidade de r/worldnews caiu de {structural_lookup.loc['worldnews_modularity', 'previous']:.4f} para "
-            f"{structural_lookup.loc['worldnews_modularity', 'current']:.4f}; ainda e alta e continua indicando subgrupos estruturais.",
-            f"- A clusterizacao de r/BrasildoB subiu de {structural_lookup.loc['BrasildoB_avg_clustering', 'previous']:.4f} para "
-            f"{structural_lookup.loc['BrasildoB_avg_clustering', 'current']:.4f}.",
+            f"- A modularidade de r/worldnews {trend(modularity_previous, modularity_current)} de "
+            f"{modularity_previous:.4f} para {modularity_current:.4f}; ainda e alta e continua indicando subgrupos estruturais.",
+            f"- A clusterizacao de r/BrasildoB {trend(clustering_previous, clustering_current)} de "
+            f"{clustering_previous:.4f} para {clustering_current:.4f}.",
             "",
             "## Teste de robustez da nova coleta",
             "",
@@ -274,7 +290,8 @@ def main() -> None:
         variant,
         overlap,
     )
-    (ANALYSIS_DIR / "dataset_comparison_report.md").write_text(report, encoding="utf-8")
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    (REPORTS_DIR / "dataset_comparison_report.md").write_text(report, encoding="utf-8")
 
     print(report)
 

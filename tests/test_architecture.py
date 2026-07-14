@@ -8,7 +8,12 @@ import pytest
 from ._bootstrap import ROOT  # noqa: F401
 from tcc_reddit.cli import build_parser
 from tcc_reddit.paths import RunPaths
-from tcc_reddit.reporting.artifacts import GEPHI_NAMES, NETWORK_NAMES, copy_immutable
+from tcc_reddit.reporting.artifacts import (
+    GEPHI_NAMES,
+    NETWORK_NAMES,
+    cleanup_legacy_layout,
+    copy_immutable,
+)
 from tcc_reddit.settings import load_config
 from tcc_reddit.validation.privacy import validate_processed_privacy
 
@@ -71,3 +76,29 @@ def test_processed_privacy_rejects_username(tmp_path: Path):
 
     with pytest.raises(ValueError, match="Identificadores diretos"):
         validate_processed_privacy(path)
+
+
+def test_legacy_cleanup_requires_valid_canonical_run(tmp_path: Path):
+    config = load_config()
+    paths = RunPaths(
+        project_root=tmp_path,
+        run_id=config.run_id,
+        raw=tmp_path / "data" / "raw" / config.run_id,
+        interim=tmp_path / "data" / "interim" / config.run_id,
+        processed_observational=tmp_path / "data" / "processed" / config.run_id / "observational",
+        processed_balanced=tmp_path / "data" / "processed" / config.run_id / "balanced",
+        results=tmp_path / "results" / config.run_id,
+        observational=tmp_path / "results" / config.run_id / "observational",
+        balanced=tmp_path / "results" / config.run_id / "balanced",
+        comparison=tmp_path / "results" / config.run_id / "comparison",
+        reports=tmp_path / "results" / config.run_id / "reports",
+        logs=tmp_path / "logs" / config.run_id,
+    )
+    legacy = tmp_path / "data" / "graphs"
+    legacy.mkdir(parents=True)
+    (legacy / "old.gexf").write_text("old", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="Limpeza legada bloqueada"):
+        cleanup_legacy_layout(paths)
+
+    assert legacy.exists()

@@ -56,6 +56,8 @@ def copy_immutable(source: Path, destination: Path) -> None:
     if not source.exists():
         raise FileNotFoundError(f"Dado bruto ausente: {source}")
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() == destination.resolve():
+        return
     if destination.exists():
         if file_sha256(source) != file_sha256(destination):
             raise ValueError(
@@ -69,6 +71,8 @@ def copy_result(source: Path, destination: Path) -> bool:
     if not source.exists():
         return False
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() == destination.resolve():
+        return True
     shutil.copy2(source, destination)
     return True
 
@@ -124,10 +128,9 @@ def _raw_manifest(config: PipelineConfig, paths: RunPaths) -> dict:
 def register_raw_run(config: PipelineConfig, paths: RunPaths) -> Path:
     """Registra uma copia imutavel dos brutos antes de publicar derivados."""
     paths.create()
-    legacy_data = paths.project_root / "data"
 
     for name in RAW_FILES:
-        copy_immutable(legacy_data / "raw" / name, paths.raw / name)
+        copy_immutable(paths.raw / name, paths.raw / name)
     raw_manifest = _raw_manifest(config, paths)
     (paths.raw / "manifest.json").write_text(
         json.dumps(raw_manifest, ensure_ascii=False, indent=2),
@@ -140,28 +143,28 @@ def publish_current_run(config: PipelineConfig, paths: RunPaths) -> Path:
     """Publica o layout legado atual sem apagar ou renomear suas fontes."""
     paths.create()
     register_raw_run(config, paths)
-    legacy_data = paths.project_root / "data"
-
     copy_result(
-        legacy_data / "processed" / "posts_clean.parquet",
+        paths.processed_observational / "posts.parquet",
         paths.processed_observational / "posts.parquet",
     )
     copy_result(
-        legacy_data / "processed" / "comments_clean.parquet",
+        paths.processed_observational / "comments.parquet",
         paths.processed_observational / "comments.parquet",
     )
     copy_result(
-        legacy_data / "balanced" / "processed" / "posts_balanced_clean.parquet",
+        paths.processed_balanced / "posts.parquet",
         paths.processed_balanced / "posts.parquet",
     )
     copy_result(
-        legacy_data / "balanced" / "processed" / "comments_balanced_clean.parquet",
+        paths.processed_balanced / "comments.parquet",
         paths.processed_balanced / "comments.parquet",
     )
     copy_result(
-        legacy_data / "balanced" / "processed" / "sampling_manifest.csv",
+        paths.processed_balanced / "sampling_manifest.csv",
         paths.processed_balanced / "sampling_manifest.csv",
     )
+
+    legacy_data = paths.project_root / "data"
 
     _publish_variant(
         legacy_data / "graphs",
@@ -207,3 +210,37 @@ def publish_current_run(config: PipelineConfig, paths: RunPaths) -> Path:
         encoding="utf-8",
     )
     return manifest_path
+
+
+def cleanup_legacy_layout(paths: RunPaths) -> list[Path]:
+    """Remove copias legadas depois que o run canonico foi validado."""
+    required = [paths.raw / name for name in RAW_FILES] + [
+        paths.processed_observational / "posts.parquet",
+        paths.processed_observational / "comments.parquet",
+        paths.processed_balanced / "posts.parquet",
+        paths.processed_balanced / "comments.parquet",
+        paths.results / "validation_report.json",
+    ]
+    missing = [path for path in required if not path.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "Limpeza legada bloqueada; artefatos canonicos ausentes: "
+            + ", ".join(str(path) for path in missing)
+        )
+
+    data = paths.project_root / "data"
+    removed = []
+    for directory in ("analysis", "balanced", "graphs", "metrics"):
+        target = data / directory
+        if target.exists():
+            shutil.rmtree(target)
+            removed.append(target)
+
+    for parent in (data / "raw", data / "processed"):
+        if not parent.exists():
+            continue
+        for target in parent.iterdir():
+            if target.is_file():
+                target.unlink()
+                removed.append(target)
+    return removed

@@ -8,6 +8,7 @@ from tcc_reddit.metrics.comparison import (
     BaselineMetric,
     build_coverage_comparison,
     delta_row,
+    trend,
 )
 
 
@@ -46,3 +47,9 @@ def test_coverage_comparison_uses_percentage_points():
 
     assert result.loc["news", "coverage_change_pp"] == pytest.approx(46.83)
     assert result.loc["politics", "coverage_change_pp"] == pytest.approx(55.19)
+
+
+def test_trend_matches_numeric_direction():
+    assert trend(0.7, 0.8) == "subiu"
+    assert trend(0.8, 0.7) == "caiu"
+    assert trend(0.8, 0.8) == "permaneceu estavel"

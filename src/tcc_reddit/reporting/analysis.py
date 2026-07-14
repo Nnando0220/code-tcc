@@ -10,20 +10,29 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from ..settings import load_config
+
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data"
-ANALYSIS_DIR = DATA_DIR / "analysis"
+RUN_ID = load_config().run_id
+RESULTS_DIR = BASE_DIR / "results" / RUN_ID
+ANALYSIS_DIR = RESULTS_DIR / "comparison"
+REPORTS_DIR = RESULTS_DIR / "reports"
 BRAZILIAN_SUBREDDITS = {"brasil", "brasilivre", "BrasildoB", "NoticiasBR"}
 INTERNATIONAL_SUBREDDITS = {"politics", "worldnews", "geopolitics", "news"}
 EXPECTED_POSTS_PER_SORT = 50
 
 
-def read_csv(relative_path: str) -> pd.DataFrame:
-    path = DATA_DIR / relative_path
-    if not path.exists():
-        return pd.DataFrame()
-    return pd.read_csv(path, low_memory=False)
+def read_csv(relative_path: str, *fallbacks: str) -> pd.DataFrame:
+    for candidate in (relative_path, *fallbacks):
+        path = BASE_DIR / candidate
+        if not path.exists():
+            continue
+        if path.suffix.lower() == ".parquet":
+            return pd.read_parquet(path)
+        return pd.read_csv(path, low_memory=False)
+    return pd.DataFrame()
 
 
 def safe_number(value):
@@ -281,13 +290,34 @@ def build_variant_comparison(
     observational_summary: pd.DataFrame,
     observational_indicators: dict,
 ) -> tuple[pd.DataFrame, dict | None]:
-    balanced_posts = read_csv("balanced/processed/posts_balanced_clean.csv")
-    balanced_comments = read_csv("balanced/processed/comments_balanced_clean.csv")
-    balanced_edges = read_csv("balanced/graphs/edges_user_user.csv")
-    balanced_user_subreddit = read_csv("balanced/graphs/edges_user_subreddit.csv")
-    balanced_subreddit_edges = read_csv("balanced/graphs/edges_subreddit_subreddit.csv")
-    balanced_metrics = read_csv("balanced/metrics/metrics_by_subreddit.csv")
-    balanced_centrality = read_csv("balanced/metrics/centrality_users.csv")
+    balanced_posts = read_csv(
+        f"data/processed/{RUN_ID}/balanced/posts.parquet",
+        "data/balanced/processed/posts_balanced_clean.csv",
+    )
+    balanced_comments = read_csv(
+        f"data/processed/{RUN_ID}/balanced/comments.parquet",
+        "data/balanced/processed/comments_balanced_clean.csv",
+    )
+    balanced_edges = read_csv(
+        f"results/{RUN_ID}/balanced/networks/user_user_edges_detailed.csv",
+        "data/balanced/graphs/edges_user_user.csv",
+    )
+    balanced_user_subreddit = read_csv(
+        f"results/{RUN_ID}/balanced/networks/user_subreddit_edges.csv",
+        "data/balanced/graphs/edges_user_subreddit.csv",
+    )
+    balanced_subreddit_edges = read_csv(
+        f"results/{RUN_ID}/balanced/networks/subreddit_subreddit_edges.csv",
+        "data/balanced/graphs/edges_subreddit_subreddit.csv",
+    )
+    balanced_metrics = read_csv(
+        f"results/{RUN_ID}/balanced/metrics/metrics_by_subreddit.csv",
+        "data/balanced/metrics/metrics_by_subreddit.csv",
+    )
+    balanced_centrality = read_csv(
+        f"results/{RUN_ID}/balanced/metrics/centrality_users.csv",
+        "data/balanced/metrics/centrality_users.csv",
+    )
     if balanced_posts.empty or balanced_metrics.empty:
         return pd.DataFrame(), None
 
@@ -429,11 +459,29 @@ def build_findings(
             )
     if not completeness.empty:
         incomplete = completeness[completeness["completion_rate"] < 1]
+        completed = len(completeness) - len(incomplete)
+        if incomplete.empty:
+            interpretation = (
+                f"As {len(completeness)} combinações entre subreddit e ordenação "
+                "atingiram o limite de 100 candidatos; nenhuma combinação ficou "
+                "abaixo do limite solicitado. Os valores de selected_posts menores "
+                "que 100 não representam falha. Isso ocorre porque o pipeline "
+                "seleciona postagens únicas por subreddit depois de remover "
+                "repetições entre as ordenações."
+            )
+        else:
+            interpretation = (
+                f"{len(incomplete)} combinações entre subreddit e ordenação ficaram "
+                "abaixo do limite solicitado. Comparações por ordenação devem "
+                "considerar essas diferenças de cobertura. Os valores de "
+                "selected_posts não medem completude, pois a seleção remove "
+                "repetições entre as ordenações."
+            )
         findings.append(
             {
                 "title": "Completude da coleta",
-                "value": f"{len(incomplete)} de {len(completeness)}",
-                "interpretation": "Combinações subreddit–ordenação abaixo do limite solicitado. Comparações por ordenação devem considerar essas diferenças de cobertura.",
+                "value": f"{completed} de {len(completeness)}",
+                "interpretation": interpretation,
             }
         )
     return findings
@@ -530,14 +578,38 @@ def build_markdown_report(snapshot: dict) -> str:
 
 
 def run_analysis(export: bool = True) -> dict:
-    posts = read_csv("processed/posts_clean.csv")
-    comments = read_csv("processed/comments_clean.csv")
-    collections = read_csv("raw/post_collections.csv")
-    user_edges = read_csv("graphs/edges_user_user.csv")
-    user_subreddit = read_csv("graphs/edges_user_subreddit.csv")
-    subreddit_edges = read_csv("graphs/edges_subreddit_subreddit.csv")
-    metrics = read_csv("metrics/metrics_by_subreddit.csv")
-    centrality = read_csv("metrics/centrality_users.csv")
+    posts = read_csv(
+        f"data/processed/{RUN_ID}/observational/posts.parquet",
+        "data/processed/posts_clean.csv",
+    )
+    comments = read_csv(
+        f"data/processed/{RUN_ID}/observational/comments.parquet",
+        "data/processed/comments_clean.csv",
+    )
+    collections = read_csv(
+        f"data/raw/{RUN_ID}/post_collections.parquet",
+        "data/raw/post_collections.csv",
+    )
+    user_edges = read_csv(
+        f"results/{RUN_ID}/observational/networks/user_user_edges_detailed.csv",
+        "data/graphs/edges_user_user.csv",
+    )
+    user_subreddit = read_csv(
+        f"results/{RUN_ID}/observational/networks/user_subreddit_edges.csv",
+        "data/graphs/edges_user_subreddit.csv",
+    )
+    subreddit_edges = read_csv(
+        f"results/{RUN_ID}/observational/networks/subreddit_subreddit_edges.csv",
+        "data/graphs/edges_subreddit_subreddit.csv",
+    )
+    metrics = read_csv(
+        f"results/{RUN_ID}/observational/metrics/metrics_by_subreddit.csv",
+        "data/metrics/metrics_by_subreddit.csv",
+    )
+    centrality = read_csv(
+        f"results/{RUN_ID}/observational/metrics/centrality_users.csv",
+        "data/metrics/centrality_users.csv",
+    )
 
     summary = build_subreddit_summary(posts, comments, user_subreddit, metrics)
     completeness = build_completeness(collections)
@@ -629,7 +701,8 @@ def run_analysis(export: bool = True) -> dict:
         (ANALYSIS_DIR / "analysis_snapshot.json").write_text(
             json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        (ANALYSIS_DIR / "interpretation_report.md").write_text(
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        (REPORTS_DIR / "interpretation_report.md").write_text(
             build_markdown_report(snapshot), encoding="utf-8"
         )
     return snapshot

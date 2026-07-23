@@ -11,3 +11,7 @@ data/
 # Resultados, metricas e grafos sao artefatos reproduziveis.
 results/
 logs/
+debug.log
+
+tcc_overleaf/
+tcc_overleaf.zip

@@ -1,0 +1,43 @@
+run_id: run_2026_07_year_v2
+
+selection:
+  maximum_nodes: 400
+  nodes_per_subreddit: 40
+  bridge_nodes: 40
+  cross_block_bridge_nodes: 40
+  bridge_bipartite_nodes: 200
+  subreddit_maximum_nodes: 400
+  fill_remaining: true
+
+components:
+  remove_isolates: true
+  minimum_component_size: 3
+  keep_largest_component_only: false
+
+node_size:
+  attribute: weighted_degree_full
+  transformation: log1p
+  minimum: 6
+  maximum: 45
+
+edge_width:
+  attribute: total_weight
+  transformation: log1p
+  minimum: 0.2
+  maximum: 3.0
+
+layout:
+  algorithm: forceatlas2
+  seed: 42
+  export_coordinates: true
+  normalize_coordinates: true
+
+privacy:
+  expose_hash_as_label: false
+  generate_display_ids: true
+
+outputs:
+  gexf: true
+  graphml: false
+  csv_manifest: true
+  svg_preview: true

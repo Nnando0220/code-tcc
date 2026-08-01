@@ -8,6 +8,11 @@ selection:
   bridge_bipartite_nodes: 200
   subreddit_maximum_nodes: 400
   fill_remaining: true
+  segmented_role_nodes:
+    central: 100
+    bridge: 80
+    ordinary: 120
+    peripheral: 100
 
 components:
   remove_isolates: true

@@ -34,5 +34,15 @@ Os subgrafos destinados às imagens ficam isolados em
 identificadores visuais, coordenadas reproduzíveis e não substituem os CSVs
 completos usados nas métricas.
 
+Os quatro GEXF principais para importação direta no Gephi são:
+
+- `user_user_communities.gexf`: comunidades estruturais de Louvain;
+- `subreddit_overlap_enriched.gexf`: sobreposição entre os oito subreddits;
+- `cross_block_bridges.gexf`: usuários presentes nos dois blocos;
+- `user_user_segmented.gexf`: conectividade, núcleo, pontes e periferia.
+
+Os IDs públicos dos usuários nesses arquivos seguem o formato `U####`; hashes
+completos permanecem apenas no manifesto privado de correspondência.
+
 Consulte [ARCHITECTURE.md](docs/ARCHITECTURE.md) e
 [REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md).

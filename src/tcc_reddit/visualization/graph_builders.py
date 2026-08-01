@@ -67,16 +67,19 @@ def build_bridge_bipartite_graph(
     user_subreddit_edges: pd.DataFrame,
     bridge_attributes: pd.DataFrame,
     subreddits: list[str] | tuple[str, ...],
+    brazilian_subreddits: list[str] | tuple[str, ...] = (),
 ) -> nx.Graph:
     users = set(bridge_attributes["user_hash"].astype(str))
     memberships = user_subreddit_edges[user_subreddit_edges["source"].isin(users)]
     graph = nx.Graph()
+    brazil = set(brazilian_subreddits)
     for subreddit in subreddits:
         graph.add_node(
             f"subreddit:{subreddit}",
             label=f"r/{subreddit}",
             node_type="subreddit",
             subreddit=subreddit,
+            block="Brasil" if subreddit in brazil else "Internacional",
             weighted_degree_full=float(
                 memberships.loc[memberships["target"] == subreddit, "weight"].sum()
             ),

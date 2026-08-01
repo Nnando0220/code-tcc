@@ -55,10 +55,10 @@ def hex_to_rgb(color: str) -> dict[str, int]:
 
 
 def color_for_node(attributes: dict, mode: str) -> str:
-    if attributes.get("node_type") == "subreddit":
-        return SUBREDDIT_COLORS.get(str(attributes.get("subreddit")), "#495057")
     if mode == "block":
         return BLOCK_COLORS.get(str(attributes.get("block")), "#ADB5BD")
+    if attributes.get("node_type") == "subreddit":
+        return SUBREDDIT_COLORS.get(str(attributes.get("subreddit")), "#495057")
     if mode == "community":
         return community_color(attributes.get("community_full", -1))
     if mode == "role":

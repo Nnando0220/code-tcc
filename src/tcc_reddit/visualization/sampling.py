@@ -105,6 +105,90 @@ def select_bridge_users(node_attributes: pd.DataFrame, maximum: int) -> pd.DataF
     )
 
 
+def select_role_stratified_users(
+    node_attributes: pd.DataFrame,
+    full_edges: pd.DataFrame,
+    config: dict,
+    expected_subreddits: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
+    """Seleciona papeis estruturais e conecta a periferia ao nucleo amostrado."""
+    maximum = int(config["maximum_nodes"])
+    role_limits = {
+        str(role): int(limit)
+        for role, limit in config["segmented_role_nodes"].items()
+    }
+    if sum(role_limits.values()) > maximum:
+        raise ValueError(
+            "A soma de segmented_role_nodes ultrapassa selection.maximum_nodes."
+        )
+
+    selected: dict[str, str] = {}
+
+    def role_count(role: str) -> int:
+        return sum(
+            reason == f"structural_role:{role}" for reason in selected.values()
+        )
+
+    def add_ranked(frame: pd.DataFrame, role: str, limit: int) -> None:
+        if limit <= 0 or frame.empty:
+            return
+        per_subreddit = max(1, limit // max(len(expected_subreddits), 1))
+        for subreddit in expected_subreddits:
+            candidates = _rank(
+                frame[frame["primary_subreddit"] == subreddit]
+            ).head(per_subreddit)
+            for user_hash in candidates["user_hash"].astype(str):
+                if len(selected) < maximum and role_count(role) < limit:
+                    selected.setdefault(user_hash, f"structural_role:{role}")
+        for user_hash in _rank(frame)["user_hash"].astype(str):
+            if len(selected) >= maximum or role_count(role) >= limit:
+                break
+            selected.setdefault(user_hash, f"structural_role:{role}")
+
+    # Primeiro seleciona o nucleo e os papeis intermediarios.
+    for role in ("central", "bridge", "ordinary"):
+        add_ranked(
+            node_attributes[node_attributes["node_role"] == role],
+            role,
+            role_limits.get(role, 0),
+        )
+
+    # A periferia e escolhida entre usuarios ligados ao conjunto acima. Assim,
+    # os nos de baixo grau permanecem visiveis no subgrafo induzido.
+    anchors = set(selected)
+    connected_edges = full_edges[
+        full_edges["node_a"].astype(str).isin(anchors)
+        | full_edges["node_b"].astype(str).isin(anchors)
+    ]
+    connected_users = set(connected_edges["node_a"].astype(str)) | set(
+        connected_edges["node_b"].astype(str)
+    )
+    peripheral = node_attributes[
+        (node_attributes["node_role"] == "peripheral")
+        & node_attributes["user_hash"].astype(str).isin(connected_users - anchors)
+    ]
+    add_ranked(peripheral, "peripheral", role_limits.get("peripheral", 0))
+
+    # Completa eventuais cotas sem alterar a prioridade dos papeis ja escolhidos.
+    for role in ("peripheral", "ordinary", "central", "bridge"):
+        if role_count(role) >= role_limits.get(role, 0):
+            continue
+        candidates = node_attributes[
+            (node_attributes["node_role"] == role)
+            & ~node_attributes["user_hash"].astype(str).isin(selected)
+        ]
+        add_ranked(candidates, role, role_limits.get(role, 0))
+
+    result = node_attributes[
+        node_attributes["user_hash"].astype(str).isin(selected)
+    ].copy()
+    result["selection_reason"] = result["user_hash"].astype(str).map(selected)
+    return result.sort_values(
+        ["node_role", "primary_subreddit", "weighted_degree_full", "user_hash"],
+        ascending=[True, True, False, True],
+    ).reset_index(drop=True)
+
+
 def build_matched_attributes(
     observational: pd.DataFrame,
     balanced: pd.DataFrame,

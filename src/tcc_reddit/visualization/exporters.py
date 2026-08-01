@@ -13,8 +13,10 @@ import pandas as pd
 from .palettes import (
     BLOCK_COLORS,
     NEUTRAL_EDGE,
+    ROLE_COLORS,
     SUBREDDIT_COLORS,
     color_for_node,
+    community_color,
     hex_to_rgb,
 )
 
@@ -90,7 +92,12 @@ def prepare_graph_for_export(
         data["visual_color"] = color
         data["visual_width"] = float(width)
         data["viz"] = {"color": hex_to_rgb(color), "thickness": float(width)}
-    return result
+    public_ids = {
+        node: display_mapping[str(node)]
+        for node, data in result.nodes(data=True)
+        if data.get("node_type") == "user"
+    }
+    return nx.relabel_nodes(result, public_ids, copy=True)
 
 
 def _svg_preview(graph: nx.Graph, path: Path, title: str, color_mode: str) -> None:
@@ -151,7 +158,24 @@ def _svg_preview(graph: nx.Graph, path: Path, title: str, color_mode: str) -> No
                 f'<text x="{x + radius + 3:.2f}" y="{y + 4:.2f}" font-family="Arial, sans-serif" font-size="11" fill="#374151">{label}</text>'
             )
     lines.append("</g>")
-    legend = BLOCK_COLORS if color_mode == "block" else SUBREDDIT_COLORS
+    if color_mode == "block":
+        legend = BLOCK_COLORS
+    elif color_mode == "role":
+        legend = ROLE_COLORS
+    elif color_mode == "community":
+        communities = sorted(
+            {
+                int(data.get("community_full", -1))
+                for _, data in graph.nodes(data=True)
+                if data.get("node_type") == "user"
+            }
+        )
+        legend = {
+            f"Comunidade {community}": community_color(community)
+            for community in communities[:12]
+        }
+    else:
+        legend = SUBREDDIT_COLORS
     lines.append('<g id="legend"><text x="1280" y="150" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1F2937">Legenda</text>')
     for index, (label, color) in enumerate(legend.items()):
         y = 185 + index * 34
@@ -181,6 +205,11 @@ def export_graph(
     checked = nx.read_gexf(output_path)
     if checked.number_of_nodes() != graph.number_of_nodes() or checked.number_of_edges() != graph.number_of_edges():
         raise ValueError(f"GEXF incompleto apos exportacao: {output_path}")
+    for node, data in checked.nodes(data=True):
+        if data.get("node_type") != "user":
+            continue
+        if len(str(node)) >= 48 or len(str(data.get("label", ""))) >= 48:
+            raise ValueError(f"Identificador privado exposto no GEXF: {output_path}")
     if preview_path is not None:
         _svg_preview(graph, preview_path, title, color_mode)
 
@@ -215,6 +244,9 @@ def write_style_legend(output_path: Path) -> None:
     ] + [
         {"dimension": "block", "value": key, "color": value}
         for key, value in BLOCK_COLORS.items()
+    ] + [
+        {"dimension": "node_role", "value": key, "color": value}
+        for key, value in ROLE_COLORS.items()
     ]
     pd.DataFrame(rows).to_csv(output_path, index=False)
 

@@ -42,6 +42,7 @@ from .node_attributes import (
 from .sampling import (
     build_matched_attributes,
     select_bridge_users,
+    select_role_stratified_users,
     select_stratified_users,
 )
 from .validation import validate_matched_graphs, validate_visualization_graph
@@ -145,8 +146,18 @@ def _build_variant_graphs(
     base = build_user_graph(context.enriched_edges, selected)
     base, component_stats = filter_components(base, config["components"])
     selected = selected[selected["user_hash"].isin(base.nodes())].copy()
+    segmented_selected = select_role_stratified_users(
+        context.node_attributes,
+        context.full_edges,
+        config["selection"],
+        subreddits,
+    )
+    segmented = build_user_graph(context.enriched_edges, segmented_selected)
+    segmented, segmented_component_stats = filter_components(
+        segmented, config["components"]
+    )
     graphs: dict[str, nx.Graph] = {
-        "user_user_segmented": base.copy(),
+        "user_user_segmented": segmented,
         "user_user_blocks": base.copy(),
         "user_user_communities": base.copy(),
     }
@@ -154,13 +165,19 @@ def _build_variant_graphs(
     bridge_nodes = int(config["selection"].get("bridge_bipartite_nodes", 200))
     bridge_attributes = select_bridge_users(context.node_attributes, bridge_nodes)
     graphs["bridge_users_bipartite"] = build_bridge_bipartite_graph(
-        context.memberships, bridge_attributes, subreddits
+        context.memberships,
+        bridge_attributes,
+        subreddits,
+        pipeline_config.brazilian_subreddits,
     )
     cross_attributes = context.node_attributes[
         context.node_attributes["is_cross_block_bridge"]
     ].copy()
     graphs["cross_block_bridges"] = build_bridge_bipartite_graph(
-        context.memberships, cross_attributes, subreddits
+        context.memberships,
+        cross_attributes,
+        subreddits,
+        pipeline_config.brazilian_subreddits,
     )
     graphs["subreddit_overlap_enriched"] = build_subreddit_overlap_graph(
         context.memberships,
@@ -203,6 +220,10 @@ def _build_variant_graphs(
     metadata = {
         "variant": context.name,
         "stratified_selection": {**graph_summary(base), **component_stats},
+        "segmented_selection": {
+            **graph_summary(segmented),
+            **segmented_component_stats,
+        },
         "subreddit_graphs": subreddit_stats,
         "graphs": {name: graph_summary(graph) for name, graph in graphs.items()},
     }
@@ -229,28 +250,44 @@ def _export_variant(
 ) -> None:
     output = context.output_directory
     seed = int(config["layout"]["seed"])
-    common_layout = calculate_layout(graphs["user_user_segmented"], seed)
+    common_layout = calculate_layout(graphs["user_user_communities"], seed)
+    segmented_layout = calculate_layout(graphs["user_user_segmented"], seed)
     modes = {
-        "user_user_segmented": ("primary", False, "Rede usuário–usuário segmentada"),
-        "user_user_blocks": ("block", True, "Separação entre blocos"),
-        "user_user_communities": ("community", True, "Comunidades estruturais (Louvain completo)"),
+        "user_user_segmented": (
+            "role",
+            False,
+            "Conectividade, núcleo e periferia",
+            segmented_layout,
+        ),
+        "user_user_blocks": (
+            "block",
+            True,
+            "Separação entre blocos",
+            common_layout,
+        ),
+        "user_user_communities": (
+            "community",
+            True,
+            "Comunidades estruturais (Louvain completo)",
+            common_layout,
+        ),
     }
     exported: dict[str, nx.Graph] = {}
-    for name, (mode, neutral, title) in modes.items():
+    for name, (mode, neutral, title, positions) in modes.items():
+        validate_visualization_graph(
+            graphs[name],
+            context.full_graph,
+            maximum_nodes=int(config["selection"]["maximum_nodes"]),
+            expected_subreddits=pipeline_config.subreddits,
+        )
         graph = prepare_graph_for_export(
             graphs[name],
             display_mapping=mapping,
-            positions=common_layout,
+            positions=positions,
             color_mode=mode,
             node_size_config=config["node_size"],
             edge_width_config=config["edge_width"],
             neutral_edges=neutral,
-        )
-        validate_visualization_graph(
-            graph,
-            context.full_graph,
-            maximum_nodes=int(config["selection"]["maximum_nodes"]),
-            expected_subreddits=pipeline_config.subreddits,
         )
         export_graph(
             graph,
@@ -271,33 +308,44 @@ def _export_variant(
         pipeline_config.brazilian_subreddits,
         pipeline_config.international_subreddits,
     )
-    for name, layout, title in (
-        ("bridge_users_bipartite", categorical_layout, "Usuários-ponte entre comunidades"),
-        ("cross_block_bridges", cross_layout, "Pontes entre Brasil e internacional"),
+    for name, layout, title, mode in (
+        (
+            "bridge_users_bipartite",
+            categorical_layout,
+            "Usuários-ponte entre comunidades",
+            "primary",
+        ),
+        (
+            "cross_block_bridges",
+            cross_layout,
+            "Pontes entre Brasil e internacional",
+            "block",
+        ),
     ):
         graph = prepare_graph_for_export(
             graphs[name], display_mapping=mapping, positions=layout,
-            color_mode="primary", node_size_config=config["node_size"],
+            color_mode=mode, node_size_config=config["node_size"],
             edge_width_config=config["edge_width"], neutral_edges=False,
         )
         export_graph(
             graph, output / f"{name}.gexf",
             preview_path=output / "previews" / f"{name}.svg",
-            title=title, color_mode="primary",
+            title=title, color_mode=mode,
         )
         exported[name] = graph
 
     overlap_layout = calculate_layout(graphs["subreddit_overlap_enriched"], seed)
     overlap = prepare_graph_for_export(
         graphs["subreddit_overlap_enriched"], display_mapping=mapping,
-        positions=overlap_layout, color_mode="primary",
-        node_size_config={**config["node_size"], "attribute": "weighted_degree_full"},
-        edge_width_config=config["edge_width"], neutral_edges=True,
+        positions=overlap_layout, color_mode="block",
+        node_size_config={**config["node_size"], "attribute": "users_count"},
+        edge_width_config={**config["edge_width"], "attribute": "shared_users"},
+        neutral_edges=True,
     )
     export_graph(
         overlap, output / "subreddit_overlap_enriched.gexf",
         preview_path=output / "previews" / "subreddit_overlap.svg",
-        title="Sobreposição entre subreddits", color_mode="primary",
+        title="Sobreposição entre subreddits", color_mode="block",
     )
     exported["subreddit_overlap_enriched"] = overlap
 
@@ -311,7 +359,7 @@ def _export_variant(
             edge_width_config=config["edge_width"], neutral_edges=True,
         )
         validate_visualization_graph(
-            graph, context.full_graph,
+            raw_graph, context.full_graph,
             maximum_nodes=int(config["selection"].get("subreddit_maximum_nodes", 400)),
             exact_edge_weights=False,
         )
@@ -321,6 +369,18 @@ def _export_variant(
         )
 
     write_selection_manifest(selected, mapping, output / "selection_manifest.csv")
+    segmented_selected = pd.DataFrame(
+        [
+            {"user_hash": str(node), **data}
+            for node, data in graphs["user_user_segmented"].nodes(data=True)
+            if data.get("node_type") == "user"
+        ]
+    )
+    write_selection_manifest(
+        segmented_selected,
+        mapping,
+        output / "segmented_selection_manifest.csv",
+    )
     write_mapping(
         {user: mapping[user] for user in sorted(_all_user_ids(graphs))},
         output / "visualization_node_mapping.csv",
@@ -366,14 +426,16 @@ def _build_and_export_comparison(
         ("observational_matched", obs_graph, observational.full_graph),
         ("balanced_matched", bal_graph, balanced.full_graph),
     ):
+        validate_visualization_graph(
+            graph,
+            full,
+            maximum_nodes=int(config["selection"]["maximum_nodes"]),
+            expected_subreddits=pipeline_config.subreddits,
+        )
         current = prepare_graph_for_export(
             graph, display_mapping=mapping, positions=positions,
             color_mode="primary", node_size_config=config["node_size"],
             edge_width_config=config["edge_width"], neutral_edges=False,
-        )
-        validate_visualization_graph(
-            current, full, maximum_nodes=int(config["selection"]["maximum_nodes"]),
-            expected_subreddits=pipeline_config.subreddits,
         )
         export_graph(
             current, output / f"{name}.gexf",

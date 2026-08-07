@@ -3,7 +3,7 @@ import json
 import os
 import re
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from itertools import combinations
 from collections import defaultdict
 from pathlib import Path
@@ -32,7 +32,10 @@ from .settings import PROJECT_ROOT, load_config
 from .collection.comments import iter_submission_comments
 from .collection.reddit_client import create_reddit_client
 from .collection.submissions import get_submissions
-from .processing.temporal_filter import submission_exclusion_reason
+from .processing.temporal_filter import (
+    resolve_collection_window,
+    submission_exclusion_reason,
+)
 
 
 # ============================================================
@@ -234,9 +237,8 @@ def collect_reddit_data():
     comments = []
     post_collections = []
 
-    collection_end = datetime.now(timezone.utc)
-    collection_start = collection_end - timedelta(days=WINDOW_DAYS)
-    collected_at = collection_end.isoformat()
+    collection_start, collection_end = resolve_collection_window(CONFIG)
+    collected_at = datetime.now(timezone.utc).isoformat()
     seen_comments = set()
 
     for subreddit_name in SUBREDDITS:
@@ -268,6 +270,7 @@ def collect_reddit_data():
                         window_start=collection_start,
                         window_end=collection_end,
                         stickied=bool(submission.stickied),
+                        exclude_stickied=CONFIG.exclude_stickied,
                     )
                     eligible = exclusion_reason is None
 

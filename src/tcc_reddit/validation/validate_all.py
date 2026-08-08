@@ -15,6 +15,11 @@ from .data_quality import (
     validate_weight_preservation,
 )
 from .graph_quality import validate_gexf_edge_count
+from .louvain_stability import (
+    LOUVAIN_STABILITY_SEEDS,
+    run_louvain_stability,
+    summarize_louvain_stability,
+)
 from .privacy import validate_processed_privacy, validate_raw_is_not_under_results
 
 
@@ -38,6 +43,18 @@ def validate_run(config: PipelineConfig, paths: RunPaths) -> dict:
         expected_posts_per_subreddit=config.posts_per_subreddit,
     )
     validate_temporal_window(posts, config.window_start, config.window_end)
+
+    louvain_stability = run_louvain_stability(
+        edges,
+        seeds=LOUVAIN_STABILITY_SEEDS,
+    )
+    louvain_output = paths.comparison / "louvain_stability.csv"
+    louvain_output.parent.mkdir(parents=True, exist_ok=True)
+    louvain_stability.to_csv(louvain_output, index=False)
+    louvain_summary = summarize_louvain_stability(louvain_stability)
+    louvain_summary["artifact"] = str(
+        louvain_output.relative_to(paths.project_root)
+    ).replace("\\", "/")
 
     balanced_posts_path = paths.processed_balanced / "posts.parquet"
     balanced_comments_path = paths.processed_balanced / "comments.parquet"
@@ -109,6 +126,7 @@ def validate_run(config: PipelineConfig, paths: RunPaths) -> dict:
         "comments": len(comments),
         "balanced_comments": len(balanced_comments),
         "graphs": graph_checks,
+        "louvain_stability": louvain_summary,
         "status": "valid",
     }
     output = paths.results / "validation_report.json"

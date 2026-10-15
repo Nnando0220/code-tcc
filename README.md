@@ -100,8 +100,6 @@ Os parâmetros são definidos em [`config/collection.yaml`](config/collection.ya
 
 O processamento remove duplicações por identificador, mantém comentários associados a postagens selecionadas e cria hashes SHA-256 dos nomes de usuário com uma chave privada (`TCC_HASH_SALT`). Identificadores ausentes, excluídos e contas ignoradas pelo procedimento de limpeza não geram usuários artificiais. Os nomes originais são retirados das tabelas processadas.
 
-**Os arquivos brutos podem conter identificadores de contas e conteúdo textual. Não os publique sem avaliação adequada de privacidade e das políticas do Reddit.** O arquivo `.env` e a chave privada também não devem ser versionados.
-
 ### 3. Duas variantes de análise
 
 | Variante | Procedimento | Finalidade |
@@ -118,8 +116,6 @@ Veja [`config/sampling.yaml`](config/sampling.yaml) e [`networks/pipeline.py`](s
 A rede usuário–usuário registra respostas ao autor de um comentário (`t1_`) ou de uma postagem (`t3_`), descartando autointerações e relações com autor inválido. São produzidas agregações dirigidas e não dirigidas com preservação do peso total.
 
 As análises incluem, conforme o grafo: **densidade, grau médio e ponderado, componentes conectados, tamanho do maior componente, coeficiente de clusterização, assortatividade de grau, modularidade e comunidades pelo Louvain**, além de centralidade de grau, grau de entrada e saída, PageRank e intermediação aproximada. Para grafos com mais de 100 nós, a intermediação utiliza uma amostra de 100 nós por padrão. Os relatórios comparativos calculam também **Gini do grau ponderado, usuários-ponte e sobreposição de Jaccard** entre subreddits.
-
-A interpretação depende da representação: modularidade indica agrupamentos estruturais, não posições ideológicas; Jaccard mede participação compartilhada, não transferência comprovada de conteúdo.
 
 ## Instalação e configuração
 
@@ -171,7 +167,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 Copie o resultado para `TCC_HASH_SALT`. As credenciais `REDDIT_*` são necessárias **somente para nova coleta**. Para reprocessar os dados locais, apenas a chave privada é obrigatória; use a **mesma chave da execução original** se precisar reproduzir exatamente os identificadores pseudonimizados. Uma chave diferente altera os hashes dos usuários.
 
-Para solicitar acesso à API e obter credenciais, consulte a [documentação para desenvolvedores do Reddit](https://www.reddit.com/dev/api/) e as políticas vigentes da plataforma. Não adicione credenciais reais ao GitHub.
+Para solicitar acesso à API e obter credenciais, consulte a [documentação para desenvolvedores do Reddit](https://www.reddit.com/dev/api/) e as políticas vigentes da plataforma.
 
 ## Como executar e reproduzir
 
@@ -336,9 +332,3 @@ code-tcc/
 ```
 
 Para informações complementares, consulte [Arquitetura](docs/ARCHITECTURE.md) e [Reprodutibilidade](docs/REPRODUCIBILITY.md).
-
----
-
-**Autoria:** Fernando Oliveira do Nascimento — Instituto Federal da Bahia, Campus Feira de Santana.  
-**Orientação:** Prof. Dr. Toni Alex Reis Borges.  
-**Finalidade:** documentação técnica e acadêmica do código da pesquisa.
